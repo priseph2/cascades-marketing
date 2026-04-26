@@ -3,6 +3,12 @@ from utils.helpers import ngn
 
 
 def calculate_revenue_impact(pagespeed, checkout, ux_audit, product_pages, woo_data):
+    pagespeed     = pagespeed     or {}
+    checkout      = checkout      or {}
+    ux_audit      = ux_audit      or {}
+    product_pages = product_pages or []
+    woo_data      = woo_data      or {}
+
     visitors    = CONFIG["monthly_visitors"]
     aov         = CONFIG["avg_order_value_ngn"]
     current_cr  = 0.005

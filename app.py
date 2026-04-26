@@ -270,7 +270,13 @@ def render_audit_tab(creds):
             ("🛒 Checkout Flow",        lambda: audit_checkout(store_url)),
             ("🏆 Competitor Analysis",  lambda: audit_competitors(CONFIG["known_competitors"])),
             ("🛍️ WooCommerce Data",     lambda: get_woo_store_data()),
-            ("💰 Revenue Impact",       lambda: calculate_revenue_impact(None, None, None, None, None)),
+            ("💰 Revenue Impact",       lambda: calculate_revenue_impact(
+                results.get("📱 PageSpeed (mobile)", {}),
+                results.get("🛒 Checkout Flow", {}),
+                results.get("🎨 UX Audit", {}),
+                results.get("📦 Product Pages", []),
+                results.get("🛍️ WooCommerce Data", {}),
+            )),
             ("💲 Price Intelligence",   lambda: run_price_intelligence()),
         ]
 
