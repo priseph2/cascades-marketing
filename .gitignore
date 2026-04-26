@@ -1,0 +1,29 @@
+# Credentials
+.env
+config.py
+config_local.py
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Generated reports
+audit_reports/*.pdf
+audit_reports/*.json
+audit_reports/*.xlsx
+audit_reports/score_history.json
+audit_reports/weekly_summary.json
+
+# Staging data
+tools/descriptions_staging.json
+tools/seo_staging.json
+tools/.progress.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
