@@ -346,11 +346,13 @@ def render_audit_tab(creds):
 
         run_background(do_audit)
 
-    # Poll while running
+    # Poll while running — re-run every 3s so progress bar actually updates
     if st.session_state.get("_bg_running"):
         msg = st.session_state.get("_progress_msg", "Running audit...")
         pct = st.session_state.get("_progress_pct", 0)
         st.progress(pct / 100, text=f"⏳ {msg}")
+        time.sleep(3)
+        st.rerun()
 
     # Show results if we have them
     result = st.session_state.get("audit_result")
@@ -523,7 +525,7 @@ def _run_push_descriptions(creds):
     def do_push():
         import subprocess
         result = subprocess.run(
-            ["py", "tools/push_descriptions.py"],
+            [sys.executable, "tools/push_descriptions.py"],
             capture_output=True, text=True, cwd=str(PROJECT_ROOT)
         )
         st.session_state["_push_output"] = result.stdout + result.stderr
@@ -641,7 +643,7 @@ def _run_push_seo(creds):
     def do_push():
         import subprocess
         result = subprocess.run(
-            ["py", "tools/push_seo.py"],
+            [sys.executable, "tools/push_seo.py"],
             capture_output=True, text=True, cwd=str(PROJECT_ROOT)
         )
         st.session_state["_seo_push_output"] = result.stdout + result.stderr
