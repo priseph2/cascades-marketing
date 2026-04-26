@@ -243,116 +243,99 @@ def render_audit_tab(creds):
         run_audit = st.button("🚀 Run Full Audit", use_container_width=True,
                               disabled=st.session_state.get("_bg_running", False))
 
-    if run_audit and not st.session_state.get("_bg_running"):
-        def do_audit():
-            import os, time
-            from datetime import datetime
-            from history.tracker import load_history, save_history, compute_run_diff, compute_weekly_summary
-            from audits.pagespeed import run_pagespeed_audit
-            from audits.ux import audit_store_ux
-            from audits.seo import run_seo_audit
-            from audits.products import audit_product_pages
-            from audits.checkout import audit_checkout
-            from audits.competitors import audit_competitors
-            from integrations.woocommerce import get_woo_store_data
-            from intelligence.revenue import calculate_revenue_impact
-            from intelligence.price import run_price_intelligence
-            from reporting.compiler import compile_full_report
-            from reporting.pdf_generator import generate_pdf
+    if run_audit:
+        from datetime import datetime
+        from history.tracker import load_history, save_history, compute_run_diff, compute_weekly_summary
+        from audits.pagespeed import run_pagespeed_audit
+        from audits.ux import audit_store_ux
+        from audits.seo import run_seo_audit
+        from audits.products import audit_product_pages
+        from audits.checkout import audit_checkout
+        from audits.competitors import audit_competitors
+        from integrations.woocommerce import get_woo_store_data
+        from intelligence.revenue import calculate_revenue_impact
+        from intelligence.price import run_price_intelligence
+        from reporting.compiler import compile_full_report
+        from reporting.pdf_generator import generate_pdf
 
-            st.session_state["_progress_msg"] = "Loading history..."
-            st.session_state["_progress_pct"] = 0
+        store_url = creds["store_url"].rstrip("/")
+        history   = load_history()
 
-            store_url = creds["store_url"].rstrip("/")
-            history   = load_history()
+        modules = [
+            ("📱 PageSpeed (mobile)",    lambda: run_pagespeed_audit(store_url, creds["pagespeed_api_key"])),
+            ("🖥️ PageSpeed (desktop)",  lambda: run_pagespeed_audit(store_url, creds["pagespeed_api_key"])),
+            ("🎨 UX Audit",             lambda: audit_store_ux(store_url)),
+            ("🔍 SEO Audit",            lambda: run_seo_audit(store_url)),
+            ("📦 Product Pages",        lambda: audit_product_pages(store_url, creds["woo_consumer_key"], creds["woo_consumer_secret"])),
+            ("🛒 Checkout Flow",        lambda: audit_checkout(store_url)),
+            ("🏆 Competitor Analysis",  lambda: audit_competitors(CONFIG["known_competitors"])),
+            ("🛍️ WooCommerce Data",     lambda: get_woo_store_data()),
+            ("💰 Revenue Impact",       lambda: calculate_revenue_impact(None, None, None, None, None)),
+            ("💲 Price Intelligence",   lambda: run_price_intelligence()),
+        ]
 
-            modules = [
-                ("PageSpeed (mobile)",    lambda: run_pagespeed_audit(store_url, creds["pagespeed_api_key"])),
-                ("PageSpeed (desktop)",  lambda: run_pagespeed_audit(store_url, creds["pagespeed_api_key"])),
-                ("UX Audit",            lambda: audit_store_ux(store_url)),
-                ("SEO Audit",           lambda: run_seo_audit(store_url)),
-                ("Product Pages",       lambda: audit_product_pages(store_url, creds["woo_consumer_key"], creds["woo_consumer_secret"])),
-                ("Checkout Flow",       lambda: audit_checkout(store_url)),
-                ("Competitor Analysis", lambda: audit_competitors(CONFIG["known_competitors"])),
-                ("WooCommerce Data",    lambda: get_woo_store_data()),
-                ("Revenue Impact",      lambda: calculate_revenue_impact(None, None, None, None, None)),
-                ("Price Intelligence",  lambda: run_price_intelligence()),
-            ]
-
-            results = {}
+        results = {}
+        with st.status("Running full audit…", expanded=True) as status:
             for i, (name, fn) in enumerate(modules):
-                st.session_state["_progress_msg"] = f"Running: {name}"
-                st.session_state["_progress_pct"] = int((i / len(modules)) * 100)
+                st.write(f"{name}")
                 try:
                     results[name] = fn()
                 except Exception as e:
                     results[name] = {"error": str(e)}
+                    st.warning(f"⚠️ {name}: {e}")
+            st.write("📝 Compiling report…")
+            status.update(label="✅ Audit complete!", state="complete")
 
-            st.session_state["_progress_msg"] = "Compiling report..."
-            st.session_state["_progress_pct"] = 90
+        pagespeed  = results.get("📱 PageSpeed (mobile)", {})
+        ux         = results.get("🎨 UX Audit", {})
+        seo        = results.get("🔍 SEO Audit", {})
+        products   = results.get("📦 Product Pages", [])
+        checkout   = results.get("🛒 Checkout Flow", {})
+        comps      = results.get("🏆 Competitor Analysis", [])
+        woo_data   = results.get("🛍️ WooCommerce Data", {})
+        rev_imp    = results.get("💰 Revenue Impact", {})
+        price_int  = results.get("💲 Price Intelligence", {})
 
-            pagespeed  = results.get("PageSpeed (mobile)", {})
-            ux        = results.get("UX Audit", {})
-            seo       = results.get("SEO Audit", {})
-            products  = results.get("Product Pages", [])
-            checkout  = results.get("Checkout Flow", {})
-            comps     = results.get("Competitor Analysis", [])
-            woo_data  = results.get("WooCommerce Data", {})
-            rev_imp   = results.get("Revenue Impact", {})
-            price_int = results.get("Price Intelligence", {})
+        report, overall = compile_full_report(
+            store_url, pagespeed, ux, products, checkout,
+            comps, seo, woo_data, rev_imp, price_int
+        )
 
-            report, overall = compile_full_report(
-                store_url, pagespeed, ux, products, checkout,
-                comps, seo, woo_data, rev_imp, price_int
-            )
+        os.makedirs(CONFIG["output_dir"], exist_ok=True)
+        ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+        json_path = os.path.join(CONFIG["output_dir"], f"audit_{ts}.json")
+        with open(json_path, "w") as f:
+            json.dump(report, f, indent=2)
 
-            os.makedirs(CONFIG["output_dir"], exist_ok=True)
-            ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
-            json_path = os.path.join(CONFIG["output_dir"], f"audit_{ts}.json")
-            with open(json_path, "w") as f:
-                json.dump(report, f, indent=2)
+        history_entry = {
+            "date":           datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "overall_score":  overall,
+            "mobile_speed":   pagespeed.get("mobile", {}).get("performance", 0),
+            "ux_score":       ux.get("score", 0),
+            "seo_score":      seo.get("score", 0),
+            "checkout_score": checkout.get("score", 0),
+        }
 
-            history_entry = {
-                "date":           datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "overall_score":  overall,
-                "mobile_speed":   pagespeed.get("mobile", {}).get("performance", 0),
-                "ux_score":       ux.get("score", 0),
-                "seo_score":      seo.get("score", 0),
-                "checkout_score": checkout.get("score", 0),
-            }
+        run_diff       = compute_run_diff(history, history_entry)
+        weekly_summary = compute_weekly_summary(history + [history_entry])
+        report["run_diff"]       = run_diff
+        report["weekly_summary"] = weekly_summary
 
-            run_diff        = compute_run_diff(history, history_entry)
-            weekly_summary  = compute_weekly_summary(history + [history_entry])
-            report["run_diff"]        = run_diff
-            report["weekly_summary"]  = weekly_summary
+        history  = save_history(history, history_entry)
+        pdf_path = generate_pdf(report, history[:-1], CONFIG["output_dir"])
 
-            history  = save_history(history, history_entry)
-            pdf_path = generate_pdf(report, history[:-1], CONFIG["output_dir"])
-
-            st.session_state["_progress_msg"] = "Done!"
-            st.session_state["_progress_pct"] = 100
-            st.session_state["audit_result"] = {
-                "report": report,
-                "json_path": json_path,
-                "pdf_path": pdf_path,
-                "overall": overall,
-                "pagespeed": pagespeed,
-                "ux": ux,
-                "seo": seo,
-                "products": products,
-                "checkout": checkout,
-                "comps": comps,
-            }
-
-        run_background(do_audit)
-
-    # Poll while running — re-run every 3s so progress bar actually updates
-    if st.session_state.get("_bg_running"):
-        msg = st.session_state.get("_progress_msg", "Running audit...")
-        pct = st.session_state.get("_progress_pct", 0)
-        st.progress(pct / 100, text=f"⏳ {msg}")
-        time.sleep(3)
-        st.rerun()
+        st.session_state["audit_result"] = {
+            "report":    report,
+            "json_path": json_path,
+            "pdf_path":  pdf_path,
+            "overall":   overall,
+            "pagespeed": pagespeed,
+            "ux":        ux,
+            "seo":       seo,
+            "products":  products,
+            "checkout":  checkout,
+            "comps":     comps,
+        }
 
     # Show results if we have them
     result = st.session_state.get("audit_result")
