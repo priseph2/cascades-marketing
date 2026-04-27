@@ -76,11 +76,21 @@ def run_search_console_analysis(gsc_secrets, site_url, days=90):
     ]
     low_ctr.sort(key=lambda x: x["impressions"], reverse=True)
 
-    # Position 4–10 queries: ranking but could hit page 1 top 3 with optimisation
+    # Position 4–10 product pages: fix title/meta to climb to top 3
     quick_wins = [
-        q for q in top_queries
-        if 4 <= q["position"] <= 10 and q["impressions"] >= 20
+        {
+            "page":        r["keys"][0] if r.get("keys") else "",
+            "clicks":      r.get("clicks", 0),
+            "impressions": r.get("impressions", 0),
+            "ctr":         round(r.get("ctr", 0) * 100, 2),
+            "position":    round(r.get("position", 0), 1),
+        }
+        for r in page_rows
+        if 4 <= r.get("position", 99) <= 10
+        and r.get("impressions", 0) >= 10
+        and "/product/" in (r["keys"][0] if r.get("keys") else "")
     ]
+    quick_wins.sort(key=lambda x: x["impressions"], reverse=True)
 
     return {
         "top_queries":     top_queries,
