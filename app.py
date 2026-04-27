@@ -558,6 +558,24 @@ def render_seo_tab(creds):
         push_btn = st.button("🚀 Push SEO Data", use_container_width=True,
                             disabled=st.session_state.get("_bg_running", False))
 
+    # Quick wins from Search Console
+    gsc = st.session_state.get("gsc_result", {})
+    quick_wins = [qw for qw in gsc.get("quick_wins", []) if "/product/" in qw.get("page", "")]
+    if quick_wins:
+        st.divider()
+        st.markdown(f"#### ⚡ Quick Wins from Search Console ({len(quick_wins)} product pages)")
+        st.caption("These pages rank position 4–10. Better titles/meta could push them to top 3.")
+        import pandas as pd
+        st.dataframe(pd.DataFrame(quick_wins)[["page", "impressions", "ctr", "position"]],
+                     use_container_width=True, hide_index=True)
+        if st.button(f"🛠️ Generate & Stage SEO fixes for {len(quick_wins)} quick wins",
+                     use_container_width=True):
+            with st.status("Fetching products and generating SEO…", expanded=True) as status:
+                count = _stage_quick_wins(quick_wins, creds)
+                status.update(label=f"✅ Staged {count} new entries!", state="complete")
+            st.rerun()
+        st.divider()
+
     if gap_btn:
         _run_seo_workflow(creds, mode="no_seo", limit=limit_seo)
     if brand_btn and brand_input:
@@ -601,6 +619,97 @@ def render_seo_tab(creds):
                                    file_name=latest.name,
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    use_container_width=True)
+
+
+def _fetch_product_by_slug(slug, creds):
+    """Fetch a single WooCommerce product by its URL slug."""
+    base = creds["store_url"].rstrip("/")
+    auth = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
+    import requests as _req
+    try:
+        r = _req.get(f"{base}/wp-json/wc/v3/products",
+                     auth=auth, params={"slug": slug, "per_page": 1}, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        return data[0] if data else None
+    except Exception:
+        return None
+
+
+def _slug_from_url(url):
+    """Extract the last path segment as slug from a product URL."""
+    return url.rstrip("/").split("/")[-1]
+
+
+def _generate_seo_from_template(product):
+    """Generate SEO title, meta description and focus keyword from product data."""
+    name       = product.get("name", "")
+    categories = [c["name"] for c in product.get("categories", [])]
+    brand      = categories[0] if categories else ""
+    price      = product.get("price", "")
+
+    title = f"{name} | Buy in Nigeria | Scentified"
+    if len(title) > 60:
+        title = f"{name} | Scentified"
+
+    if price:
+        meta = (f"Buy {name} for ₦{int(float(price)):,} at Scentified. "
+                f"Authentic {brand} fragrance. Fast delivery across Lagos & Nigeria.")
+    else:
+        meta = (f"Shop {name} at Scentified – Nigeria's home of niche perfume. "
+                f"Authentic {brand}. Fast delivery across Lagos & Nigeria.")
+    meta = meta[:160]
+
+    keyword = f"{brand.lower()} nigeria" if brand else "luxury perfume nigeria"
+
+    return {"seo_title": title, "seo_description": meta, "focus_keyword": keyword}
+
+
+def _stage_quick_wins(quick_wins, creds):
+    """Fetch products for quick win URLs, generate SEO and save to staging."""
+    staging_path = PROJECT_ROOT / "tools" / "seo_staging.json"
+    existing     = load_staging("seo")
+    existing_ids = {p["id"] for p in existing}
+
+    new_entries = []
+    for qw in quick_wins:
+        page = qw.get("query") or qw.get("page", "")
+        # quick_wins rows use 'query' key — but we need page URL; skip non-product pages
+        url = qw.get("page", "")
+        if not url or "/product/" not in url:
+            continue
+        slug    = _slug_from_url(url)
+        product = _fetch_product_by_slug(slug, creds)
+        if not product:
+            st.warning(f"Product not found for slug: {slug}")
+            continue
+        if product["id"] in existing_ids:
+            continue
+
+        seo = _generate_seo_from_template(product)
+        entry = {
+            "id":              product["id"],
+            "name":            product.get("name", ""),
+            "slug":            slug,
+            "permalink":       product.get("permalink", url),
+            "categories":      [c["name"] for c in product.get("categories", [])],
+            "seo_title":       seo["seo_title"],
+            "seo_description": seo["seo_description"],
+            "focus_keyword":   seo["focus_keyword"],
+            "source":          "gsc_quick_win",
+            "gsc_position":    qw.get("position"),
+            "gsc_impressions": qw.get("impressions"),
+            "qa_passed":       True,
+            "update_status":   "pending",
+        }
+        new_entries.append(entry)
+        existing_ids.add(product["id"])
+        st.write(f"✅ {product['name']}")
+
+    combined = existing + new_entries
+    with open(staging_path, "w", encoding="utf-8") as f:
+        json.dump(combined, f, indent=2, ensure_ascii=False)
+    return len(new_entries)
 
 
 def _run_seo_workflow(creds, mode="no_seo", brand=None, limit=10):
