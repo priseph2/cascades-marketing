@@ -506,29 +506,45 @@ def _run_push_descriptions(creds):
         st.warning("No QA-passed entries in staging. Run a description batch first.")
         return
 
-    st.warning("⚠️ **Push is destructive** — this will write directly to your WooCommerce store.")
-    confirm = st.checkbox("I have reviewed the Excel report and confirm I want to push live.")
+    st.warning(f"⚠️ This will write descriptions for **{len(qa_passed)} products** directly to your WooCommerce store.")
+    confirm = st.button("✅ Confirm & Push Live", type="primary", use_container_width=True, key="confirm_push_desc")
     if not confirm:
         return
 
-    def do_push():
-        import subprocess
-        result = subprocess.run(
-            [sys.executable, "tools/push_descriptions.py"],
-            capture_output=True, text=True, cwd=str(PROJECT_ROOT)
-        )
-        st.session_state["_push_output"] = result.stdout + result.stderr
+    base = creds["store_url"].rstrip("/")
+    auth = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
+    staging_path = PROJECT_ROOT / "tools" / "descriptions_staging.json"
+    import requests as _req
 
-    if confirm:
-        run_background(do_push)
-        poll_until_done()
-        output = st.session_state.get("_push_output", "")
-        st.code(output or "Push complete.")
-        # Refresh
-        staging = load_staging("descriptions")
-        pushed  = [p for p in staging if p.get("update_status") == "success"]
-        failed  = [p for p in staging if p.get("update_status") == "failed"]
-        st.success(f"✅ Pushed: {len(pushed)} | Failed: {len(failed)}")
+    pushed = failed = 0
+    with st.status(f"Pushing {len(qa_passed)} descriptions…", expanded=True) as status:
+        for entry in staging:
+            if not entry.get("qa_passed") or entry.get("update_status") == "success":
+                continue
+            try:
+                payload = {}
+                if entry.get("long_description"):
+                    payload["description"] = entry["long_description"]
+                if entry.get("short_description"):
+                    payload["short_description"] = entry["short_description"]
+                if payload:
+                    r = _req.put(f"{base}/wp-json/wc/v3/products/{entry['id']}",
+                                 auth=auth, json=payload, timeout=30)
+                    r.raise_for_status()
+                entry["update_status"] = "success"
+                pushed += 1
+                st.write(f"✅ {entry.get('name', entry['id'])}")
+            except Exception as e:
+                entry["update_status"] = "failed"
+                entry["update_error"]  = str(e)
+                failed += 1
+                st.write(f"❌ {entry.get('name', entry['id'])}: {e}")
+            time.sleep(0.3)
+
+        with open(staging_path, "w", encoding="utf-8") as f:
+            json.dump(staging, f, indent=2, ensure_ascii=False)
+        status.update(label=f"✅ Done — Pushed: {pushed} | Failed: {failed}", state="complete")
+    st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -756,8 +772,8 @@ def _run_push_seo(creds):
         st.warning("No pending QA-passed entries in staging.")
         return
 
-    st.warning("⚠️ **Push is destructive** — this will update RankMath meta fields on your WooCommerce products.")
-    confirm = st.checkbox("I have reviewed the staging and confirm I want to push live.")
+    st.warning(f"⚠️ This will update RankMath SEO fields for **{len(to_push)} products** on your live store.")
+    confirm = st.button("✅ Confirm & Push Live", type="primary", use_container_width=True)
     if not confirm:
         return
 
