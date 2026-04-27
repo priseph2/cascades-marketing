@@ -842,28 +842,33 @@ def render_market_seo_tab(creds):
 
         # Load GSC credentials from Streamlit secrets
         try:
-            gsc_json     = st.secrets["gsc"]["service_account_json"]
-            gsc_site_url = st.secrets["gsc"].get("site_url", creds["store_url"])
-            gsc_ready    = True
+            gsc_secrets  = dict(st.secrets["gsc"])
+            gsc_site_url = gsc_secrets.get("site_url", creds["store_url"])
+            gsc_ready    = all(k in gsc_secrets for k in ("client_id", "client_secret", "refresh_token"))
         except Exception:
             gsc_ready = False
 
         if not gsc_ready:
             st.warning("Search Console not configured yet.")
             st.markdown("""
-**Setup (one time):**
+**Setup (one time — takes ~5 minutes):**
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com) → create a project
-2. Enable **Google Search Console API**
-3. Create a **Service Account** → download the JSON key
-4. In Search Console → Settings → Users → add the service account email as **Full user**
-5. In Streamlit Cloud → app settings → Secrets, add:
-
-```toml
-[gsc]
-site_url = "https://scentifiedperfume.com"
-service_account_json = '''{ paste the entire service account JSON here }'''
-```
+1. [Google Cloud Console](https://console.cloud.google.com) → your `scentified-seo` project
+2. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+   - Type: **Desktop app** → Create → download the JSON
+3. In your terminal, run:
+   ```
+   py get_gsc_token.py path/to/downloaded_oauth_client.json
+   ```
+   A browser window will open — sign in with your Google account and allow access.
+4. Copy the output into **Streamlit Cloud → app settings → Secrets**:
+   ```toml
+   [gsc]
+   site_url = "https://scentifiedperfume.com"
+   client_id = "..."
+   client_secret = "..."
+   refresh_token = "..."
+   ```
 """)
         else:
             days = st.slider("Date range (days)", 30, 90, 90, step=30)
@@ -872,7 +877,7 @@ service_account_json = '''{ paste the entire service account JSON here }'''
                 with st.status("Fetching Search Console data…", expanded=True) as status:
                     st.write("Connecting to Google Search Console API…")
                     try:
-                        gsc_result = run_search_console_analysis(gsc_json, gsc_site_url, days=days)
+                        gsc_result = run_search_console_analysis(gsc_secrets, gsc_site_url, days=days)
                         st.session_state["gsc_result"] = gsc_result
                         status.update(label="✅ Done!", state="complete")
                     except Exception as e:

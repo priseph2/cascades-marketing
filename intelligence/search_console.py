@@ -2,16 +2,16 @@ import json
 from datetime import datetime, timedelta
 
 
-def get_gsc_service(service_account_info):
-    from google.oauth2 import service_account
+def get_gsc_service(gsc_secrets):
+    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    if isinstance(service_account_info, str):
-        service_account_info = json.loads(service_account_info)
-
-    creds = service_account.Credentials.from_service_account_info(
-        service_account_info,
-        scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+    creds = Credentials(
+        token=None,
+        refresh_token=gsc_secrets["refresh_token"],
+        client_id=gsc_secrets["client_id"],
+        client_secret=gsc_secrets["client_secret"],
+        token_uri="https://oauth2.googleapis.com/token",
     )
     return build("searchconsole", "v1", credentials=creds, cache_discovery=False)
 
@@ -45,8 +45,8 @@ def _fmt(rows, key_index=0):
     ]
 
 
-def run_search_console_analysis(service_account_info, site_url, days=90):
-    service = get_gsc_service(service_account_info)
+def run_search_console_analysis(gsc_secrets, site_url, days=90):
+    service = get_gsc_service(gsc_secrets)
 
     # All queries sorted by clicks
     all_rows = _query(service, site_url, days, ["query"])
