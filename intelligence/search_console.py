@@ -1,0 +1,97 @@
+import json
+from datetime import datetime, timedelta
+
+
+def get_gsc_service(service_account_info):
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+
+    if isinstance(service_account_info, str):
+        service_account_info = json.loads(service_account_info)
+
+    creds = service_account.Credentials.from_service_account_info(
+        service_account_info,
+        scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+    )
+    return build("searchconsole", "v1", credentials=creds, cache_discovery=False)
+
+
+def _query(service, site_url, days, dimensions, filters=None, row_limit=500):
+    end_date   = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    body = {
+        "startDate":  start_date,
+        "endDate":    end_date,
+        "dimensions": dimensions,
+        "rowLimit":   row_limit,
+        "dataState":  "all",
+    }
+    if filters:
+        body["dimensionFilterGroups"] = [{"filters": filters}]
+    resp = service.searchanalytics().query(siteUrl=site_url, body=body).execute()
+    return resp.get("rows", [])
+
+
+def _fmt(rows, key_index=0):
+    return [
+        {
+            "query":       r["keys"][key_index] if r.get("keys") else "",
+            "clicks":      r.get("clicks", 0),
+            "impressions": r.get("impressions", 0),
+            "ctr":         round(r.get("ctr", 0) * 100, 2),
+            "position":    round(r.get("position", 0), 1),
+        }
+        for r in rows
+    ]
+
+
+def run_search_console_analysis(service_account_info, site_url, days=90):
+    service = get_gsc_service(service_account_info)
+
+    # All queries sorted by clicks
+    all_rows = _query(service, site_url, days, ["query"])
+    top_queries = _fmt(sorted(all_rows, key=lambda x: x.get("clicks", 0), reverse=True)[:50])
+
+    # Nigeria-only queries
+    ng_rows = _query(service, site_url, days, ["query"], filters=[
+        {"dimension": "country", "operator": "equals", "expression": "nga"}
+    ])
+    nigeria_queries = _fmt(sorted(ng_rows, key=lambda x: x.get("clicks", 0), reverse=True)[:50])
+
+    # Pages by impressions
+    page_rows = _query(service, site_url, days, ["page"])
+
+    # Low CTR: ranking (position ≤ 20) but barely clicked (CTR < 3%)
+    low_ctr = [
+        {
+            "page":        r["keys"][0] if r.get("keys") else "",
+            "impressions": r.get("impressions", 0),
+            "ctr":         round(r.get("ctr", 0) * 100, 2),
+            "position":    round(r.get("position", 0), 1),
+        }
+        for r in page_rows
+        if r.get("impressions", 0) >= 50
+        and r.get("ctr", 1) < 0.03
+        and r.get("position", 99) <= 20
+    ]
+    low_ctr.sort(key=lambda x: x["impressions"], reverse=True)
+
+    # Position 4–10 queries: ranking but could hit page 1 top 3 with optimisation
+    quick_wins = [
+        q for q in top_queries
+        if 4 <= q["position"] <= 10 and q["impressions"] >= 20
+    ]
+
+    return {
+        "top_queries":     top_queries,
+        "nigeria_queries": nigeria_queries,
+        "low_ctr_pages":   low_ctr[:20],
+        "quick_wins":      quick_wins[:20],
+        "summary": {
+            "total_queries":    len(all_rows),
+            "nigeria_queries":  len(ng_rows),
+            "low_ctr_pages":    len(low_ctr),
+            "quick_wins":       len(quick_wins),
+            "date_range_days":  days,
+        },
+    }

@@ -722,14 +722,201 @@ def render_status_tab(creds):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# TAB: MARKET SEO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def render_market_seo_tab(creds):
+    import pandas as pd
+    st.markdown("## 📈 Market SEO Intelligence")
+    st.markdown("Keyword trends, competitor gaps, and Search Console insights for Nigeria.")
+
+    t1, t2, t3 = st.tabs(["🔑 Keywords", "🏆 Competitor Gaps", "📊 Search Console"])
+
+    # ── Keywords ──────────────────────────────────────────────────────────────
+    with t1:
+        st.markdown("#### Google Trends & Autocomplete — Nigeria")
+        st.caption("Shows what Nigerians are actually searching for when buying luxury perfume online.")
+        if st.button("▶ Run Keyword Research", use_container_width=True):
+            from intelligence.keyword_research import run_keyword_research
+            with st.status("Fetching keyword data…", expanded=True) as status:
+                st.write("🔎 Scraping Google Autocomplete…")
+                result = run_keyword_research()
+                status.update(label="✅ Done!", state="complete")
+
+            st.session_state["kw_result"] = result
+
+        result = st.session_state.get("kw_result")
+        if result:
+            trends = result.get("trends", {})
+            if trends and "error" not in trends:
+                st.markdown("**Search Interest in Nigeria (last 12 months, 0–100 scale)**")
+                trend_rows = [
+                    {"Keyword": kw, "Avg Interest": v["avg"], "Peak": v["max"], "Trend": "↑" if v["trend"] == "up" else "↓"}
+                    for kw, v in trends.items() if "error" not in v
+                ]
+                if trend_rows:
+                    st.dataframe(pd.DataFrame(trend_rows).sort_values("Avg Interest", ascending=False),
+                                 use_container_width=True, hide_index=True)
+            elif "error" in trends:
+                st.warning(f"Google Trends: {trends['error']} — autocomplete results still available below.")
+
+            st.divider()
+            st.markdown("**Autocomplete Suggestions**")
+            ac = result.get("autocomplete", {})
+            for seed, suggestions in ac.items():
+                if suggestions:
+                    with st.expander(f'"{seed}"'):
+                        for s in suggestions:
+                            st.markdown(f"- {s}")
+
+            related = result.get("related_queries", {})
+            if related and "error" not in related:
+                st.divider()
+                st.markdown("**Related Queries for 'perfume Nigeria'**")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.caption("Top queries")
+                    top = related.get("top", [])
+                    if top:
+                        st.dataframe(pd.DataFrame(top), use_container_width=True, hide_index=True)
+                with c2:
+                    st.caption("Rising queries")
+                    rising = related.get("rising", [])
+                    if rising:
+                        st.dataframe(pd.DataFrame(rising), use_container_width=True, hide_index=True)
+
+    # ── Competitor Gaps ────────────────────────────────────────────────────────
+    with t2:
+        st.markdown("#### Competitor SEO Analysis")
+        st.caption("Scrapes your known competitors and identifies keyword and brand gaps.")
+        if st.button("▶ Analyse Competitors", use_container_width=True):
+            from intelligence.competitor_seo import run_competitor_seo_analysis
+            with st.status("Analysing competitors…", expanded=True) as status:
+                for url in CONFIG.get("known_competitors", []):
+                    st.write(f"Scraping {url}…")
+                result = run_competitor_seo_analysis()
+                status.update(label="✅ Done!", state="complete")
+            st.session_state["comp_seo_result"] = result
+
+        comp = st.session_state.get("comp_seo_result")
+        if comp:
+            st.info(comp.get("gap_summary", ""))
+            st.divider()
+            for c in comp.get("competitors", []):
+                with st.expander(c["url"]):
+                    if c.get("error"):
+                        st.error(c["error"])
+                        continue
+                    st.markdown(f"**Title:** {c['title'] or '—'}")
+                    st.markdown(f"**Meta:** {c['meta_description'] or '—'}")
+                    cols = st.columns(3)
+                    cols[0].metric("Keywords matched", len(c.get("keywords_found", [])))
+                    cols[1].metric("Our brands present", len(c.get("brands_found", [])))
+                    cols[2].metric("Internal links", c.get("internal_link_count", 0))
+                    feats = []
+                    if c.get("has_blog"):    feats.append("✅ Blog/content")
+                    if c.get("has_schema"):  feats.append("✅ Schema markup")
+                    if c.get("has_reviews"): feats.append("✅ Reviews")
+                    if feats:
+                        st.markdown("  ".join(feats))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Keywords they target that we don't**")
+                for kw in comp.get("competitor_only_keywords", []):
+                    st.markdown(f"- {kw}")
+            with col2:
+                st.markdown("**Our unique keywords (they don't have)**")
+                for kw in comp.get("our_unique_keywords", []):
+                    st.markdown(f"- {kw}")
+
+            gaps = comp.get("brands_not_on_competitors", [])
+            if gaps:
+                st.divider()
+                st.markdown("**Our brands absent from all competitor sites** *(differentiation opportunity)*")
+                st.markdown(", ".join(gaps))
+
+    # ── Search Console ─────────────────────────────────────────────────────────
+    with t3:
+        st.markdown("#### Google Search Console")
+
+        # Load GSC credentials from Streamlit secrets
+        try:
+            gsc_json     = st.secrets["gsc"]["service_account_json"]
+            gsc_site_url = st.secrets["gsc"].get("site_url", creds["store_url"])
+            gsc_ready    = True
+        except Exception:
+            gsc_ready = False
+
+        if not gsc_ready:
+            st.warning("Search Console not configured yet.")
+            st.markdown("""
+**Setup (one time):**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) → create a project
+2. Enable **Google Search Console API**
+3. Create a **Service Account** → download the JSON key
+4. In Search Console → Settings → Users → add the service account email as **Full user**
+5. In Streamlit Cloud → app settings → Secrets, add:
+
+```toml
+[gsc]
+site_url = "https://scentifiedperfume.com"
+service_account_json = '''{ paste the entire service account JSON here }'''
+```
+""")
+        else:
+            days = st.slider("Date range (days)", 30, 90, 90, step=30)
+            if st.button("▶ Fetch Search Console Data", use_container_width=True):
+                from intelligence.search_console import run_search_console_analysis
+                with st.status("Fetching Search Console data…", expanded=True) as status:
+                    st.write("Connecting to Google Search Console API…")
+                    try:
+                        gsc_result = run_search_console_analysis(gsc_json, gsc_site_url, days=days)
+                        st.session_state["gsc_result"] = gsc_result
+                        status.update(label="✅ Done!", state="complete")
+                    except Exception as e:
+                        status.update(label="❌ Error", state="error")
+                        st.error(str(e))
+
+            gsc = st.session_state.get("gsc_result")
+            if gsc:
+                s = gsc["summary"]
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Queries",   s["total_queries"])
+                m2.metric("Nigeria Queries", s["nigeria_queries"])
+                m3.metric("Low CTR Pages",   s["low_ctr_pages"])
+                m4.metric("Quick Wins",      s["quick_wins"])
+
+                st.divider()
+                st.markdown("**🇳🇬 Top queries from Nigeria**")
+                if gsc["nigeria_queries"]:
+                    st.dataframe(pd.DataFrame(gsc["nigeria_queries"]), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No Nigeria-specific query data yet.")
+
+                st.divider()
+                st.markdown("**⚡ Quick wins — ranking position 4–10, fix the title/meta to climb**")
+                if gsc["quick_wins"]:
+                    st.dataframe(pd.DataFrame(gsc["quick_wins"]), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No quick win candidates found.")
+
+                st.divider()
+                st.markdown("**📉 Low CTR pages — ranking but not getting clicked**")
+                if gsc["low_ctr_pages"]:
+                    st.dataframe(pd.DataFrame(gsc["low_ctr_pages"]), use_container_width=True, hide_index=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN LAYOUT
 # ═══════════════════════════════════════════════════════════════════════════════
 
 st.title("✨ Scentified Marketing Suite")
 st.caption(f"Store: {get_creds()['store_url']}  |  Today: {datetime.now().strftime('%d %B %Y')}")
 
-tab_audit, tab_desc, tab_seo, tab_status = st.tabs(
-    ["📊 Audit", "✍️ Descriptions", "🔍 SEO Gaps", "📦 Status"]
+tab_audit, tab_desc, tab_seo, tab_market, tab_status = st.tabs(
+    ["📊 Audit", "✍️ Descriptions", "🔍 SEO Gaps", "📈 Market SEO", "📦 Status"]
 )
 
 with tab_audit:
@@ -738,5 +925,7 @@ with tab_desc:
     render_descriptions_tab(creds)
 with tab_seo:
     render_seo_tab(creds)
+with tab_market:
+    render_market_seo_tab(creds)
 with tab_status:
     render_status_tab(creds)
