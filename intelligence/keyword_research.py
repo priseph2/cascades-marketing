@@ -20,6 +20,14 @@ BRAND_KEYWORDS = [
 ]
 
 
+def _pytrends_available():
+    try:
+        import pytrends  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def get_autocomplete(query):
     try:
         r = requests.get(
@@ -35,6 +43,8 @@ def get_autocomplete(query):
 
 
 def get_trends_data(keywords):
+    if not _pytrends_available():
+        return {"error": "pytrends not installed — trends unavailable"}
     try:
         from pytrends.request import TrendReq
         pt = TrendReq(hl="en-US", tz=60, timeout=(10, 25), retries=2, backoff_factor=0.5)
@@ -63,6 +73,8 @@ def get_trends_data(keywords):
 
 
 def get_related_queries(keyword):
+    if not _pytrends_available():
+        return {"error": "pytrends not installed"}
     try:
         from pytrends.request import TrendReq
         pt = TrendReq(hl="en-US", tz=60, timeout=(10, 25), retries=2, backoff_factor=0.5)
@@ -95,9 +107,9 @@ def run_keyword_research():
     related = get_related_queries("perfume Nigeria")
 
     return {
-        "autocomplete":   autocomplete,
-        "trends":         trends,
+        "autocomplete":    autocomplete,
+        "trends":          trends,
         "related_queries": related,
-        "seed_keywords":  SEED_KEYWORDS,
-        "brand_keywords": BRAND_KEYWORDS,
+        "seed_keywords":   SEED_KEYWORDS,
+        "brand_keywords":  BRAND_KEYWORDS,
     }
