@@ -726,35 +726,66 @@ def _run_seo_workflow(creds, mode="no_seo", brand=None, limit=10):
     """)
 
 
+def _push_seo_entry(entry, base, auth):
+    """Push one staging entry directly via WooCommerce REST API."""
+    import requests as _req
+    # Support both field name conventions
+    title   = entry.get("seo_title") or entry.get("proposed_seo_title", "")
+    desc    = entry.get("seo_description") or entry.get("proposed_seo_desc", "")
+    keyword = entry.get("focus_keyword", "")
+
+    payload = {
+        "meta_data": [
+            {"key": "rank_math_title",         "value": title},
+            {"key": "rank_math_description",   "value": desc},
+            {"key": "rank_math_focus_keyword", "value": keyword},
+        ]
+    }
+    r = _req.put(
+        f"{base}/wp-json/wc/v3/products/{entry['id']}",
+        auth=auth, json=payload, timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 def _run_push_seo(creds):
-    staging = load_staging("seo")
-    qa_passed = [p for p in staging if p.get("qa_passed")]
-    if not qa_passed:
-        st.warning("No QA-passed entries in staging. Run an SEO batch first.")
+    staging   = load_staging("seo")
+    to_push   = [p for p in staging if p.get("qa_passed") and p.get("update_status") != "success"]
+    if not to_push:
+        st.warning("No pending QA-passed entries in staging.")
         return
 
     st.warning("⚠️ **Push is destructive** — this will update RankMath meta fields on your WooCommerce products.")
-    confirm = st.checkbox("I have reviewed the Excel report and confirm I want to push live.")
+    confirm = st.checkbox("I have reviewed the staging and confirm I want to push live.")
     if not confirm:
         return
 
-    def do_push():
-        import subprocess
-        result = subprocess.run(
-            [sys.executable, "tools/push_seo.py"],
-            capture_output=True, text=True, cwd=str(PROJECT_ROOT)
-        )
-        st.session_state["_seo_push_output"] = result.stdout + result.stderr
+    base = creds["store_url"].rstrip("/")
+    auth = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
+    staging_path = PROJECT_ROOT / "tools" / "seo_staging.json"
 
-    if confirm:
-        run_background(do_push)
-        poll_until_done()
-        output = st.session_state.get("_seo_push_output", "")
-        st.code(output or "Push complete.")
-        staging = load_staging("seo")
-        pushed  = [p for p in staging if p.get("update_status") == "success"]
-        failed  = [p for p in staging if p.get("update_status") == "failed"]
-        st.success(f"✅ Pushed: {len(pushed)} | Failed: {len(failed)}")
+    pushed = failed = 0
+    with st.status(f"Pushing {len(to_push)} products…", expanded=True) as status:
+        for entry in to_push:
+            try:
+                _push_seo_entry(entry, base, auth)
+                entry["update_status"] = "success"
+                pushed += 1
+                st.write(f"✅ {entry.get('name', entry['id'])}")
+            except Exception as e:
+                entry["update_status"] = "failed"
+                entry["update_error"]  = str(e)
+                failed += 1
+                st.write(f"❌ {entry.get('name', entry['id'])}: {e}")
+            time.sleep(0.3)
+
+        with open(staging_path, "w", encoding="utf-8") as f:
+            json.dump(staging, f, indent=2, ensure_ascii=False)
+
+        status.update(label=f"✅ Done — Pushed: {pushed} | Failed: {failed}", state="complete")
+
+    st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
