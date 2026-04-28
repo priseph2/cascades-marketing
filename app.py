@@ -573,6 +573,8 @@ def render_seo_tab(creds):
         st.caption("Push QA-passed SEO data live")
         push_btn = st.button("🚀 Push SEO Data", use_container_width=True,
                             disabled=st.session_state.get("_bg_running", False))
+        if push_btn:
+            st.session_state["seo_push_step"] = "confirm"
 
     # Quick wins from Search Console
     gsc = st.session_state.get("gsc_result", {})
@@ -599,8 +601,10 @@ def render_seo_tab(creds):
     if brand_btn and not brand_input:
         st.warning("Enter a brand name to filter by.")
 
-    if push_btn:
+    if st.session_state.get("seo_push_step") == "confirm":
         _run_push_seo(creds)
+    elif st.session_state.get("seo_push_step") == "pushing":
+        _do_seo_push(creds)
 
     # Show current staging
     staging = load_staging("seo")
@@ -766,19 +770,32 @@ def _push_seo_entry(entry, base, auth):
 
 
 def _run_push_seo(creds):
-    staging   = load_staging("seo")
-    to_push   = [p for p in staging if p.get("qa_passed") and p.get("update_status") != "success"]
+    """Show confirmation UI. Sets session state to 'pushing' when confirmed."""
+    staging = load_staging("seo")
+    to_push = [p for p in staging if p.get("qa_passed") and p.get("update_status") != "success"]
     if not to_push:
         st.warning("No pending QA-passed entries in staging.")
+        st.session_state.pop("seo_push_step", None)
         return
 
     st.warning(f"⚠️ This will update RankMath SEO fields for **{len(to_push)} products** on your live store.")
-    confirm = st.button("✅ Confirm & Push Live", type="primary", use_container_width=True)
-    if not confirm:
-        return
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("✅ Confirm & Push Live", type="primary", use_container_width=True):
+            st.session_state["seo_push_step"] = "pushing"
+            st.rerun()
+    with c2:
+        if st.button("Cancel", use_container_width=True):
+            st.session_state.pop("seo_push_step", None)
+            st.rerun()
 
-    base = creds["store_url"].rstrip("/")
-    auth = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
+
+def _do_seo_push(creds):
+    """Execute the actual push — called only when session state is 'pushing'."""
+    staging      = load_staging("seo")
+    to_push      = [p for p in staging if p.get("qa_passed") and p.get("update_status") != "success"]
+    base         = creds["store_url"].rstrip("/")
+    auth         = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
     staging_path = PROJECT_ROOT / "tools" / "seo_staging.json"
 
     pushed = failed = 0
@@ -798,9 +815,9 @@ def _run_push_seo(creds):
 
         with open(staging_path, "w", encoding="utf-8") as f:
             json.dump(staging, f, indent=2, ensure_ascii=False)
-
         status.update(label=f"✅ Done — Pushed: {pushed} | Failed: {failed}", state="complete")
 
+    st.session_state.pop("seo_push_step", None)
     st.rerun()
 
 
