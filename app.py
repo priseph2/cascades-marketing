@@ -443,9 +443,13 @@ def render_descriptions_tab(creds):
         _run_descriptions_workflow(creds, mode="reformat", limit=limit_val)
     if all_btn:
         _run_descriptions_workflow(creds, mode="reformat_all")
-
     if push_btn:
+        st.session_state["desc_push_step"] = "confirm"
+
+    if st.session_state.get("desc_push_step") == "confirm":
         _run_push_descriptions(creds)
+    elif st.session_state.get("desc_push_step") == "pushing":
+        _do_desc_push(creds)
 
     # Show current staging if available
     staging = load_staging("descriptions")
@@ -499,37 +503,50 @@ def _run_descriptions_workflow(creds, mode="new", limit=5):
 
 
 def _run_push_descriptions(creds):
-    """Run push_descriptions.py in a background thread."""
+    """Show confirmation UI. Sets session state to 'pushing' when confirmed."""
     staging = load_staging("descriptions")
-    qa_passed = [p for p in staging if p.get("qa_passed")]
-    if not qa_passed:
-        st.warning("No QA-passed entries in staging. Run a description batch first.")
+    to_push = [p for p in staging if p.get("qa_passed") and p.get("update_status") != "success"]
+    if not to_push:
+        st.warning("No pending QA-passed entries in staging.")
+        st.session_state.pop("desc_push_step", None)
         return
 
-    st.warning(f"⚠️ This will write descriptions for **{len(qa_passed)} products** directly to your WooCommerce store.")
-    confirm = st.button("✅ Confirm & Push Live", type="primary", use_container_width=True, key="confirm_push_desc")
-    if not confirm:
-        return
+    st.warning(f"⚠️ This will write descriptions for **{len(to_push)} products** directly to your WooCommerce store.")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("✅ Confirm & Push Live", type="primary", use_container_width=True, key="confirm_desc_push"):
+            st.session_state["desc_push_step"] = "pushing"
+            st.rerun()
+    with c2:
+        if st.button("Cancel", use_container_width=True, key="cancel_desc_push"):
+            st.session_state.pop("desc_push_step", None)
+            st.rerun()
 
-    base = creds["store_url"].rstrip("/")
-    auth = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
-    staging_path = PROJECT_ROOT / "tools" / "descriptions_staging.json"
+
+def _do_desc_push(creds):
+    """Execute the actual descriptions push — called only when session state is 'pushing'."""
     import requests as _req
+    staging      = load_staging("descriptions")
+    to_push      = [p for p in staging if p.get("qa_passed") and p.get("update_status") != "success"]
+    base         = creds["store_url"].rstrip("/")
+    auth         = (creds["woo_consumer_key"], creds["woo_consumer_secret"])
+    staging_path = PROJECT_ROOT / "tools" / "descriptions_staging.json"
 
     pushed = failed = 0
-    with st.status(f"Pushing {len(qa_passed)} descriptions…", expanded=True) as status:
-        for entry in staging:
-            if not entry.get("qa_passed") or entry.get("update_status") == "success":
-                continue
+    with st.status(f"Pushing {len(to_push)} descriptions…", expanded=True) as status:
+        for entry in to_push:
             try:
                 payload = {}
-                if entry.get("long_description"):
-                    payload["description"] = entry["long_description"]
+                # Staging JSON uses "description" for long HTML and "short_description" for plain text
+                if entry.get("description"):
+                    payload["description"] = entry["description"]
                 if entry.get("short_description"):
                     payload["short_description"] = entry["short_description"]
                 if payload:
-                    r = _req.put(f"{base}/wp-json/wc/v3/products/{entry['id']}",
-                                 auth=auth, json=payload, timeout=30)
+                    r = _req.put(
+                        f"{base}/wp-json/wc/v3/products/{entry['id']}",
+                        auth=auth, json=payload, timeout=30,
+                    )
                     r.raise_for_status()
                 entry["update_status"] = "success"
                 pushed += 1
@@ -544,6 +561,8 @@ def _run_push_descriptions(creds):
         with open(staging_path, "w", encoding="utf-8") as f:
             json.dump(staging, f, indent=2, ensure_ascii=False)
         status.update(label=f"✅ Done — Pushed: {pushed} | Failed: {failed}", state="complete")
+
+    st.session_state.pop("desc_push_step", None)
     st.rerun()
 
 
