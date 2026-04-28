@@ -9,42 +9,109 @@
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Setup & Configuration](#2-setup--configuration)
-3. [Skill: /audit](#3-skill-audit)
-4. [Skill: /product-descriptions](#4-skill-product-descriptions)
-5. [Understanding the Reports](#5-understanding-the-reports)
-6. [Tools Reference](#6-tools-reference)
-7. [Project File Structure](#7-project-file-structure)
-8. [Troubleshooting](#8-troubleshooting)
+2. [Slash Commands Reference](#2-slash-commands-reference)
+3. [Setup & Configuration](#3-setup--configuration)
+4. [Skill: /audit](#4-skill-audit)
+5. [Skill: /product-descriptions](#5-skill-product-descriptions)
+6. [Skill: /seo-gaps](#6-skill-seo-gaps)
+7. [Streamlit Web App](#7-streamlit-web-app)
+8. [Understanding the Reports](#8-understanding-the-reports)
+9. [Tools Reference](#9-tools-reference)
+10. [Project File Structure](#10-project-file-structure)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
 ## 1. Overview
 
-The Scentified Marketing Suite is a Claude Code project that gives you two AI-powered slash commands:
+The Scentified Marketing Suite is a Claude Code project that gives you AI-powered slash commands for running, writing, and pushing content for scentifiedperfume.com — plus a live Streamlit web app for non-technical team members.
 
 | Command | What it does |
 |---|---|
-| `/audit` | Runs a full 9-point eCommerce audit of scentifiedperfume.com and generates a scored PDF report |
+| `/audit` | Runs a full 9-point eCommerce audit and generates a scored PDF report |
 | `/product-descriptions` | Researches products, writes SEO copy, verifies quality, and pushes descriptions to WooCommerce |
 | `/seo-gaps` | Generates optimised RankMath SEO titles and meta descriptions, exports for review, and pushes live |
 
-Both commands are invoked directly in Claude Code (the CLI or VS Code extension). No terminal commands needed — just type the slash command and Claude handles everything.
+Slash commands are invoked directly in Claude Code (the CLI, VS Code extension, or desktop app). No terminal commands needed — just type the slash command and Claude handles everything.
+
+The [Streamlit web app](#7-streamlit-web-app) provides a browser-based UI for running audits, managing descriptions, analysing SEO gaps, and viewing Market SEO Intelligence (keyword trends, competitor gaps, Search Console data).
 
 ---
 
-## 2. Setup & Configuration
+## 2. Slash Commands Reference
+
+> **How to add a new command:** Create a new skill file at `.claude/skills/<command-name>/SKILL.md`, then add it to the table below in the relevant category. The command is immediately available in Claude Code with no restart required.
+
+### Scentified — Store Operations
+
+These commands are scoped to scentifiedperfume.com.
+
+| Command | Description |
+|---|---|
+| `/audit` | Full 9-point eCommerce audit → scored PDF + JSON |
+| `/audit` | Re-run any time — score history is tracked automatically |
+
+### Scentified — Content & SEO
+
+| Command | Description |
+|---|---|
+| `/product-descriptions` | Research & write descriptions for 5 products with no copy |
+| `/product-descriptions 10` | Same, for 10 products |
+| `/product-descriptions 20` | Same, for 20 products |
+| `/product-descriptions --all` | Research & write for every product missing a description |
+| `/product-descriptions --reformat` | Reformat 10 existing descriptions into the SEO template |
+| `/product-descriptions --reformat 20` | Same, for 20 products |
+| `/product-descriptions --reformat --all` | Reformat every old-format product |
+| `/product-descriptions --reformat --brand "BTV"` | Reformat all BTV products |
+| `/product-descriptions --reformat --brand "Clive Christian"` | Reformat all Clive Christian products |
+| `/product-descriptions --status` | Live count of products by status and image coverage |
+| `/product-descriptions --no-image` | List all products with no images |
+| `/product-descriptions --no-image 20` | List up to 20 products with no images |
+| `/product-descriptions --no-image --brand "BTV"` | No-image products for one brand |
+| `/product-descriptions --push` | Push all QA-approved descriptions live to WooCommerce |
+| `/seo-gaps` | Generate SEO titles & meta descriptions for 10 products with no RankMath title |
+| `/seo-gaps 20` | Same, for 20 products |
+| `/seo-gaps --all` | Optimise every product regardless of current SEO status |
+| `/seo-gaps --brand "BTV"` | Optimise all products for one brand |
+| `/seo-gaps --ids 123,456,789` | Optimise specific products by WooCommerce ID |
+| `/seo-gaps --dry-run` | Preview what would be pushed without making any changes |
+| `/seo-gaps --push` | Push all QA-approved SEO data live |
+
+### System & Configuration
+
+| Command | Description |
+|---|---|
+| `/update-config` | Update `config.py` credentials (WooCommerce keys, API key) interactively |
+
+### Quick Reference: Which command for which situation?
+
+| Situation | Command |
+|---|---|
+| Product has NO description at all | `/product-descriptions` |
+| Product HAS a description but it's in the old format | `/product-descriptions --reformat` |
+| Reformat an entire brand in one go | `/product-descriptions --reformat --brand "Brand Name"` |
+| Find products with no images | `/product-descriptions --no-image` |
+| Check how many products still need work | `/product-descriptions --status` |
+| Push all approved descriptions live | `/product-descriptions --push` |
+| Generate SEO titles for products that have none | `/seo-gaps` |
+| Generate SEO titles for a specific brand | `/seo-gaps --brand "Brand Name"` |
+| Push approved SEO data live | `/seo-gaps --push` |
+| Run a full site health check | `/audit` |
+
+---
+
+## 3. Setup & Configuration
 
 ### Prerequisites
 
 ```
 Python 3.x (installed as `py` on Windows)
-pip packages: requests, openpyxl, reportlab, beautifulsoup4
+pip packages: see requirements.txt
 ```
 
 Install all dependencies:
 ```bash
-py -m pip install requests openpyxl reportlab beautifulsoup4
+py -m pip install -r requirements.txt
 ```
 
 ### config.py
@@ -64,9 +131,29 @@ CONFIG = {
 - WooCommerce keys: WooCommerce > Settings > Advanced > REST API
 - PageSpeed API key: Google Cloud Console > APIs & Services > PageSpeed Insights API
 
+### Streamlit Cloud secrets
+
+When running the web app on Streamlit Community Cloud, credentials are stored in `.streamlit/secrets.toml` (configured via the Streamlit Cloud dashboard, not committed to git):
+
+```toml
+[woocommerce]
+store_url        = "https://scentifiedperfume.com"
+consumer_key     = "ck_..."
+consumer_secret  = "cs_..."
+
+[pagespeed]
+api_key = "AIza..."
+
+[gsc]
+client_id     = "..."
+client_secret = "..."
+refresh_token = "..."
+site_url      = "https://scentifiedperfume.com/"
+```
+
 ---
 
-## 3. Skill: /audit
+## 4. Skill: /audit
 
 ### What it does
 
@@ -143,7 +230,7 @@ audit_reports/
 
 ---
 
-## 4. Skill: /product-descriptions
+## 5. Skill: /product-descriptions
 
 ### What it does
 
@@ -241,7 +328,7 @@ Two descriptions are written per product using only facts found in Step 3:
 
 *Short description (plain text, 60–100 words)*
 - Names the brand, key notes, concentration, bottle size
-- Always includes "Nigeria" or "Lagos"
+- Always includes "Nigeria", "Lagos", "West Africa", or "across West Africa" — varied across products
 - Tone: confident, sensory, aspirational
 
 *Long description (HTML, 280–400 words)*
@@ -261,7 +348,7 @@ The checklist covers:
 - Longevity/projection match the Fragrantica ratings
 - Short description is 60–100 words
 - Long description is 280–400 words
-- Contains "Nigeria" or "Lagos"
+- Contains "Nigeria", "Lagos", "West Africa", or "across West Africa"
 - Product name in the long description opening
 - Brand name appears at least twice
 - No clichéd openers ("Introducing…", "Experience…")
@@ -328,7 +415,138 @@ This runs `tools/push_descriptions.py`, which:
 
 ---
 
-## 5. Understanding the Reports
+## 6. Skill: /seo-gaps
+
+### What it does
+
+Generates optimised SEO titles and meta descriptions for every product and pushes them to WooCommerce via RankMath. Produces an Excel report showing current vs. proposed copy side by side before anything goes live.
+
+**Requires:** RankMath SEO plugin installed and active on WordPress.
+
+### Commands
+
+#### Optimise products with no SEO title yet (default — 10 products)
+```
+/seo-gaps
+/seo-gaps 20
+```
+
+#### Optimise all products for one brand
+```
+/seo-gaps --brand "BTV"
+/seo-gaps --brand "Clive Christian"
+```
+
+#### Optimise specific products by ID
+```
+/seo-gaps --ids 123,456,789
+```
+
+#### Optimise every product regardless of current SEO status
+```
+/seo-gaps --all
+```
+
+#### Preview what would be pushed (no changes made)
+```
+/seo-gaps --dry-run
+```
+
+#### Push approved SEO titles and descriptions live
+```
+/seo-gaps --push
+```
+
+### What gets generated per product
+
+**Focus Keyword (2–4 words)**  
+Formula: `[Brand short name] [Product short name] [EDP/EDT/Parfum]`  
+Chosen for Nigerian buyer search intent.
+
+**SEO Title (50–60 characters)**  
+Keyword-first formula: `[Focus Keyword] | Buy in Nigeria — Scentified`  
+Optimised for Google's 60-character display limit and local buying intent.
+
+**Meta Description (140–155 characters)**  
+Hook + performance signal + authenticity claim + CTA.  
+Always includes "Nigeria", "Lagos", or "West Africa" as the primary local intent signal.
+
+**Content Patch**  
+Embeds the focus keyword in the first paragraph of the product description, adds an internal link to the brand's category page, and adds an external DoFollow link to the brand's official website.
+
+**Slug Optimisation**  
+Proposes a cleaner URL slug only when the current one is clearly suboptimal (too long or missing the brand/product name).
+
+**Image Alt Text**  
+Formula: `[Focus Keyword] perfume Nigeria` — set on the product's primary image.
+
+### Excel report sheets
+
+| Sheet | Contents |
+|---|---|
+| Summary | QA result, character counts for current and proposed titles/descriptions |
+| Side by Side | Current vs. proposed titles and descriptions for easy reading and approval |
+| Research Data | Primary keyword, SERP notes, sources used per product |
+
+### Output files
+
+```
+audit_reports/seo_gaps_<timestamp>.xlsx     Excel review report
+tools/seo_staging.json                       Working file — cleared on each new run
+```
+
+---
+
+## 7. Streamlit Web App
+
+### Live URL
+
+The app is deployed on Streamlit Community Cloud. Ask the project owner for the current URL, or access it via your Streamlit Cloud dashboard.
+
+### What the web app does
+
+The Streamlit app gives anyone on the team browser-based access to the same tools available via slash commands — no Claude Code required. It is ideal for running audits, reviewing staging data, and monitoring Market SEO Intelligence.
+
+### Tabs
+
+| Tab | What it does |
+|---|---|
+| **Audit** | Runs the full 9-point eCommerce audit. Displays a live progress log and the final scored summary. Downloadable JSON and PDF links appear on completion. |
+| **Descriptions** | Shows the current `descriptions_staging.json` — all staged products with QA status, word counts, and descriptions. Push approved descriptions live directly from this tab. |
+| **SEO Gaps** | Shows the current `seo_staging.json`. Displays Search Console quick wins (product pages ranking 4–10 that could reach top 3) at the top. Stage quick wins for one-click SEO improvement. Push approved SEO data live from this tab. |
+| **Market SEO** | Three intelligence modules: Keyword Research (Google Autocomplete data for Nigerian perfume queries + Google Trends), Competitor SEO (scrapes competitor pages and shows title/meta/H1/keyword gaps), Search Console (top queries, Nigeria-only queries, low-CTR pages, quick wins — all pulled live from Google Search Console via OAuth). |
+
+### Running the app locally
+
+```bash
+py -m streamlit run app.py
+```
+
+The app reads credentials from `config.py` (for WooCommerce) and `st.secrets` (for Streamlit Cloud). Locally, it falls back to `config.py` automatically.
+
+### Credentials required for each tab
+
+| Tab | Credentials needed |
+|---|---|
+| Audit | WooCommerce key + secret, PageSpeed API key |
+| Descriptions | WooCommerce key + secret |
+| SEO Gaps | WooCommerce key + secret |
+| Market SEO — Search Console | GSC client ID, client secret, refresh token, site URL |
+| Market SEO — Keyword Research | None (uses public Google Autocomplete endpoint) |
+| Market SEO — Competitor SEO | None (uses public web scraping) |
+
+### Setting up Google Search Console (one-time)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) and create a project
+2. Enable the **Google Search Console API**
+3. Create OAuth 2.0 credentials (Desktop app type)
+4. Download the client secret JSON
+5. Run `py get_gsc_token.py` — it opens a browser, you authenticate, it prints your `refresh_token`
+6. Add `client_id`, `client_secret`, and `refresh_token` to Streamlit Cloud secrets under `[gsc]`
+
+---
+
+## 8. Understanding the Reports
 
 ### Audit PDF (`scentified_audit_v2_<timestamp>.pdf`)
 
@@ -374,9 +592,19 @@ Four-sheet review document. The most important columns in **Sheet 1 (Summary)**:
 
 **Sheet 4 (Raw HTML)** is the copy you'd paste directly into WooCommerce > Product > Description if you preferred to do it manually.
 
+### SEO Gaps Excel (`seo_gaps_<timestamp>.xlsx`)
+
+Three-sheet review document:
+
+| Sheet | What to check |
+|---|---|
+| Summary | QA result, character counts — confirm title is 50–60 chars, description is 140–155 chars |
+| Side by Side | Read both current and proposed copy — approve or note any changes needed |
+| Research Data | Focus keyword, SERP notes, keyword density — useful if a title needs manual adjustment |
+
 ---
 
-## 6. Tools Reference
+## 9. Tools Reference
 
 These scripts are called by the skills automatically. You can also run them manually.
 
@@ -465,24 +693,25 @@ Updates a single product from a JSON payload file (used by push_descriptions.py 
 py tools/update_product.py path/to/payload.json
 ```
 
-Payload format:
-```json
-{
-  "id": 1234,
-  "name": "Product Name",
-  "short_description": "Plain text...",
-  "description": "<p>HTML...</p>"
-}
+### get_gsc_token.py
+
+One-time OAuth flow for Google Search Console. Opens a browser, you authenticate, and it prints `client_id`, `client_secret`, and `refresh_token` for Streamlit secrets.
+
+```bash
+py get_gsc_token.py
 ```
 
 ---
 
-## 7. Project File Structure
+## 10. Project File Structure
 
 ```
 cascades-marketing/
 ├── config.py                   API keys, store URL, benchmarks
 ├── main.py                     Audit entry point — runs all 9 audits
+├── app.py                      Streamlit web UI (all 4 tabs)
+├── get_gsc_token.py            One-time OAuth flow for Google Search Console
+├── requirements.txt            Python dependencies for Streamlit Cloud
 ├── USER_MANUAL.md              This document
 │
 ├── .claude/skills/
@@ -515,7 +744,10 @@ cascades-marketing/
 │
 ├── intelligence/
 │   ├── price.py                Brand price mapping
-│   └── revenue.py              Revenue impact calculator
+│   ├── revenue.py              Revenue impact calculator
+│   ├── keyword_research.py     Google Autocomplete + Google Trends for Nigerian keywords
+│   ├── competitor_seo.py       Competitor page scraper — title/meta/H1/keyword gap analysis
+│   └── search_console.py       Google Search Console API — top queries, Nigeria queries, quick wins
 │
 ├── reporting/
 │   ├── compiler.py             Assembles final report object
@@ -531,76 +763,13 @@ cascades-marketing/
     ├── audit_*.json
     ├── scentified_audit_v2_*.pdf
     ├── product_descriptions_*.xlsx
+    ├── seo_gaps_*.xlsx
     └── score_history.json
 ```
 
 ---
 
-## 5b. Skill: /seo-gaps
-
-### What it does
-
-Generates optimised SEO titles and meta descriptions for every product and pushes them to WooCommerce via RankMath. Produces an Excel report showing current vs. proposed copy side by side before anything goes live.
-
-**Requires:** RankMath SEO plugin installed and active on WordPress.
-
-### Commands
-
-#### Optimise products with no SEO title yet (default — 10 products)
-```
-/seo-gaps
-/seo-gaps 20
-```
-
-#### Optimise all products for one brand
-```
-/seo-gaps --brand "BTV"
-/seo-gaps --brand "Clive Christian"
-```
-
-#### Optimise every product regardless of current SEO status
-```
-/seo-gaps --all
-```
-
-#### Preview what would be pushed (no changes made)
-```
-/seo-gaps --dry-run
-```
-
-#### Push approved SEO titles and descriptions live
-```
-/seo-gaps --push
-```
-
-### What gets generated per product
-
-**SEO Title (50–60 characters)**
-Keyword-first formula: `[Brand] [Product] [Concentration] | Nigeria — Scentified`
-Optimised for Google's 60-character display limit and local buying intent.
-
-**Meta Description (140–155 characters)**
-Hook + performance signal + authenticity claim + CTA.
-Always includes "Nigeria" or "Lagos" as the primary local intent signal.
-
-### Excel report sheets
-
-| Sheet | Contents |
-|---|---|
-| Summary | QA result, character counts for current and proposed titles/descriptions |
-| Side by Side | Current vs. proposed titles and descriptions for easy reading and approval |
-| Research Data | Primary keyword, SERP notes, sources used per product |
-
-### Output files
-
-```
-audit_reports/seo_gaps_<timestamp>.xlsx     Excel review report
-tools/seo_staging.json                       Working file — cleared on each new run
-```
-
----
-
-## 8. Troubleshooting
+## 11. Troubleshooting
 
 ### `/audit` fails with PageSpeed timeout
 
@@ -647,6 +816,19 @@ If neither works, reinstall Python from python.org and ensure "Add to PATH" is c
 3. Fix the issue (or correct the description manually)
 4. Set `"qa_passed": true`
 5. Run `/product-descriptions --push`
+
+### Search Console shows no data
+
+- Verify `gsc.refresh_token` in Streamlit secrets is valid — tokens expire if unused for 6 months
+- Re-run `py get_gsc_token.py` to get a fresh token
+- Confirm `gsc.site_url` exactly matches the property URL in Search Console (including trailing slash)
+- Confirm the Google account used for OAuth has access to the Search Console property
+
+### Streamlit Cloud build fails
+
+Check the deployment logs in the Streamlit Cloud dashboard. Common causes:
+- A dependency in `requirements.txt` is incompatible with Python 3.14 (pytrends is a known issue — it is excluded for this reason)
+- A secrets key is missing or misnamed — compare against the `[woocommerce]`, `[pagespeed]`, and `[gsc]` structure above
 
 ---
 
