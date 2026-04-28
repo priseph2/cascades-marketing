@@ -77,6 +77,41 @@ These commands are scoped to scentifiedperfume.com.
 | `/seo-gaps --dry-run` | Preview what would be pushed without making any changes |
 | `/seo-gaps --push` | Push all QA-approved SEO data live |
 
+### Marketing — Content & Campaigns
+
+| Command | Description |
+|---|---|
+| `/market-social` | Generate a 7-day Instagram/TikTok content calendar from your product catalogue |
+| `/market-social --month` | 28-day content calendar |
+| `/market-social --product "Name"` | 5 posts dedicated to one product |
+| `/market-social --brand "Name"` | 7 posts showcasing one brand |
+| `/market-social --reels` | TikTok/Reels video scripts only |
+| `/market-social --stories` | Instagram Stories sequences only |
+| `/market-emails --sequence welcome` | 4-email welcome sequence for new subscribers |
+| `/market-emails --sequence abandoned-cart` | 3-email cart recovery sequence |
+| `/market-emails --sequence new-arrivals` | Single new product announcement email |
+| `/market-emails --sequence vip` | 3-email VIP/loyalty sequence for repeat buyers |
+| `/market-emails --sequence re-engagement` | 3-email win-back sequence for inactive subscribers |
+| `/market-emails --sequence launch --brand "Name"` | 3-email brand launch sequence |
+| `/market-ads` | Full Meta + Google ad campaign for the store |
+| `/market-ads --product "Name"` | Ad set for one specific product |
+| `/market-ads --brand "Name"` | Campaign for all products from one brand |
+| `/market-ads --platform meta` | Meta (Facebook + Instagram) only |
+| `/market-ads --platform google` | Google Search + Performance Max only |
+| `/market-ads --retargeting` | Retargeting sequences for warm audiences only |
+
+### Marketing — Strategy & Brand
+
+| Command | Description |
+|---|---|
+| `/market-brand` | Analyse Scentified's brand voice and produce a BRAND-VOICE.md guidelines document |
+| `/market-brand --quick` | Condensed version: voice summary, do's/don'ts, and copy samples only |
+| `/market-brand --compare` | Include competitor voice comparison (3 Nigerian luxury retailers) |
+| `/market-launch --brand "Name"` | Full 4-week launch playbook for a new brand (e.g. first time carrying Fragrance du Bois) |
+| `/market-launch --product "Name"` | 2-week spotlight campaign for a single hero product |
+| `/market-launch --seasonal "Campaign"` | Seasonal campaign plan (Valentine's Day, Eid, Christmas, etc.) |
+| `/market-launch --restock "Brand"` | Quick 2-week restock announcement plan |
+
 ### System & Configuration
 
 | Command | Description |
@@ -97,6 +132,13 @@ These commands are scoped to scentifiedperfume.com.
 | Generate SEO titles for a specific brand | `/seo-gaps --brand "Brand Name"` |
 | Push approved SEO data live | `/seo-gaps --push` |
 | Run a full site health check | `/audit` |
+| Plan a week of Instagram content | `/market-social --week` |
+| Write email sequences for customers | `/market-emails --sequence welcome` |
+| Generate Meta + Google ad copy | `/market-ads` |
+| Generate ad copy for one specific product | `/market-ads --product "Name"` |
+| Document Scentified's brand voice | `/market-brand` |
+| Create a launch plan for a new brand | `/market-launch --brand "Name"` |
+| Create a seasonal campaign plan | `/market-launch --seasonal "Valentine's Day"` |
 
 ---
 
