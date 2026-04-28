@@ -611,6 +611,8 @@ def render_seo_tab(creds):
                 count = _stage_quick_wins(quick_wins, creds)
                 status.update(label=f"✅ Staged {count} new entries!", state="complete")
             st.rerun()
+        st.caption("ℹ️ Quick wins generate title + meta from a template. "
+                   "For full RankMath 100/100 (keyword in content too), run `/seo-gaps` in Claude Code instead.")
         st.divider()
 
     if gap_btn:
@@ -681,25 +683,44 @@ def _slug_from_url(url):
 
 
 def _generate_seo_from_template(product):
-    """Generate SEO title, meta description and focus keyword from product data."""
+    """Generate SEO title, meta description and focus keyword from product data.
+
+    RankMath requires the focus keyword to appear verbatim in the title, meta,
+    and content. We derive the keyword from the product name so it naturally
+    fits in the title formula and meta sentence.
+    """
     name       = product.get("name", "")
     categories = [c["name"] for c in product.get("categories", [])]
     brand      = categories[0] if categories else ""
     price      = product.get("price", "")
 
-    title = f"{name} | Buy in Nigeria | Scentified"
-    if len(title) > 60:
-        title = f"{name} | Scentified"
+    # Focus keyword: first 3–4 meaningful words of the product name
+    # (product names already start with the brand, e.g. "Clive Christian Addictive Arts EDP 100ml")
+    skip = {"edp", "edt", "parfum", "extrait", "spray", "100ml", "50ml", "75ml", "200ml", "ml"}
+    words = [w for w in name.split() if w.lower() not in skip]
+    keyword = " ".join(words[:4]).strip()
 
+    # SEO title: keyword must appear within the first 30 chars (RankMath rule)
+    title = f"{keyword} | Buy in Nigeria — Scentified"
+    if len(title) > 60:
+        title = f"{keyword} | Nigeria — Scentified"
+    if len(title) > 60:
+        short_kw = " ".join(words[:3])
+        title = f"{short_kw} | Nigeria — Scentified"
+    title = title[:60]
+
+    # Meta description: must contain focus keyword verbatim
     if price:
-        meta = (f"Buy {name} for ₦{int(float(price)):,} at Scentified. "
+        try:
+            price_fmt = f"₦{int(float(price)):,}"
+        except Exception:
+            price_fmt = f"₦{price}"
+        meta = (f"Buy {keyword} for {price_fmt} at Scentified. "
                 f"Authentic {brand} fragrance. Fast delivery across Lagos & Nigeria.")
     else:
-        meta = (f"Shop {name} at Scentified – Nigeria's home of niche perfume. "
-                f"Authentic {brand}. Fast delivery across Lagos & Nigeria.")
-    meta = meta[:160]
-
-    keyword = f"{brand.lower()} nigeria" if brand else "luxury perfume nigeria"
+        meta = (f"Shop {keyword} at Scentified. Authentic {brand} fragrance. "
+                f"Fast delivery across Lagos & Nigeria.")
+    meta = meta[:155]
 
     return {"seo_title": title, "seo_description": meta, "focus_keyword": keyword}
 
@@ -766,9 +787,12 @@ def _run_seo_workflow(creds, mode="no_seo", brand=None, limit=10):
 
 
 def _push_seo_entry(entry, base, auth):
-    """Push one staging entry directly via WooCommerce REST API."""
+    """Push one staging entry directly via WooCommerce REST API.
+
+    Sends RankMath meta fields + proposed_description (when present) so
+    RankMath's content keyword check passes alongside the title/meta checks.
+    """
     import requests as _req
-    # Support both field name conventions
     title   = entry.get("seo_title") or entry.get("proposed_seo_title", "")
     desc    = entry.get("seo_description") or entry.get("proposed_seo_desc", "")
     keyword = entry.get("focus_keyword", "")
@@ -780,6 +804,12 @@ def _push_seo_entry(entry, base, auth):
             {"key": "rank_math_focus_keyword", "value": keyword},
         ]
     }
+
+    # Push the keyword-patched description content if available (from /seo-gaps).
+    # Without this, RankMath's "Focus Keyword in content" check always fails.
+    if entry.get("proposed_description"):
+        payload["description"] = entry["proposed_description"]
+
     r = _req.put(
         f"{base}/wp-json/wc/v3/products/{entry['id']}",
         auth=auth, json=payload, timeout=30,
